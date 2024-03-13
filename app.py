@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient,models
 from qdrant_client.http.models import PointStruct
 from openai import OpenAI
 
-from flask import Flask, request, abort
+from flask import Flask, request, abort, render_template
 from linebot.v3 import (
     WebhookHandler
 )
@@ -53,6 +53,48 @@ configuration = Configuration(
     access_token=channel_access_token
 )
 
+@app.route("/callback", methods=['POST'])
+def callback():
+    # get X-Line-Signature header value
+    signature = request.headers['X-Line-Signature']
+    # get request body as text
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
+
+    # parse webhook body
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessageContent)
+def message_text(event):
+    global qa
+    chat_history = []
+    query = event.message.text
+       
+    chat_history = ask_question_with_context(qa, query, chat_history)
+    
+
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message_with_http_info(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=chat_history)]
+            )
+        )
+
+@app.route('/', methods=['GET','POST'])
+def home():
+   if request.form and 'question' in request.form:
+        site = request.form.get('question')
+        print(site)
+   return render_template('index.html')
+
+
 os.environ["OPENAI_API_KEY"]=config['Rag']['OPENAI_API_KEY']
 os.environ["QDRANT_URL"]=config['Rag']['QDRANT_URL']
 
@@ -77,20 +119,11 @@ for get_info in info:
   print(get_info)
 
 
-def load_and_split_documents(filepath="baby.pdf"):
+def load_and_split_documents(filepath="./static/test1.pdf"):
   loader = PyPDFLoader(filepath)
   documents = loader.load()
   text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
   return text_splitter.split_documents(documents)
-
-
-def ask_question_with_context(qa, question, chat_history):
-
-    query = ""
-    result = qa({"question": question, "chat_history": chat_history})
-    print("answer:", result["answer"])
-    chat_history = [(query, result["answer"])]
-    return chat_history
 
 
 def get_embeddings():
@@ -110,24 +143,22 @@ def get_document_store(docs, embeddings):
     embeddings,
     url=os.environ.get("QDRANT_URL"),
     collection_name="first_project",
-    # force_recreate=True,
     api_key="PtYX2su0b_Xof19YN54ybCUvIZgdA94HqDe0vPUHBQ8CNu7Moun0VQ"
   )
   print(upsert)
   return upsert
 
 
-def ask_question_with_context(qa, question, chat_history):
-
+def ask_question_with_context(question, chat_history):
+    global qa
     query = ""
     result = qa({"question": question, "chat_history": chat_history})
     print("answer:", result["answer"])
     chat_history = [(query, result["answer"])]
     return chat_history
 
-
 def main():
-
+    global qa
     embeddings = get_embeddings()
     docs = load_and_split_documents()
     
@@ -140,14 +171,14 @@ def main():
         return_source_documents=True,
         verbose=False
     )
-
-    chat_history = []
-    while True:
-        query = input('you: ')
-        if query == 'q':
-            break
-        chat_history = ask_question_with_context(qa, query, chat_history)
-
+    print(qa)
+    # chat_history = []
+    # while True:
+    #     query = input('you: ')
+    #     if query == 'q':
+    #         break
+    #     chat_history = ask_question_with_context(qa, query, chat_history)
+main()
 
 if __name__ == "__main__":
     app.run()
