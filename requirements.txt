@@ -1,0 +1,9 @@
+line-bot-sdk
+flask
+configparser
+langchain
+PyPDF2
+qdrant_client
+langchain_openai
+pypdf
+openai
