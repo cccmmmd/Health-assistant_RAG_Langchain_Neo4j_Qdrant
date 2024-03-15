@@ -68,35 +68,36 @@ def callback():
         abort(400)
     return 'OK'
 
+chat_history = []
 @handler.add(MessageEvent, message=TextMessageContent)
 def message_text(event):
-    global qa
-    chat_history = []
+    global chat_history
     query = event.message.text
-       
-    chat_history = ask_question_with_context(qa, query, chat_history)
     
-
+    response = ask_question_with_context(query, chat_history)   
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=chat_history)]
+                messages=[TextMessage(text=response)]
             )
         )
 
 @app.route('/', methods=['GET','POST'])
 def home():
+   global chat_history
+   response=''
    if request.form and 'question' in request.form:
         site = request.form.get('question')
-        print(site)
-   return render_template('index.html')
+        response = ask_question_with_context(site, chat_history)  
+   return render_template('index.html', response=response)
 
 
 os.environ["OPENAI_API_KEY"]=config['Rag']['OPENAI_API_KEY']
 os.environ["QDRANT_URL"]=config['Rag']['QDRANT_URL']
+os.environ["QDRANT_COLLECTION_NAME"]=config['Rag']['QDRANT_COLLECTION_NAME']
 
 #create new cluseter in qdrant
 
@@ -106,24 +107,11 @@ connection = QdrantClient(
 )
 
 
-connection.recreate_collection(
-    collection_name="first_project",
-    vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
-)
-print("Create collection reponse:", connection)
-
-info = connection.get_collection(collection_name="first_project")
+info = connection.get_collection(collection_name=os.environ.get("QDRANT_COLLECTION_NAME"))
 
 print("Collection info:", info)
 for get_info in info:
   print(get_info)
-
-
-def load_and_split_documents(filepath="./static/test1.pdf"):
-  loader = PyPDFLoader(filepath)
-  documents = loader.load()
-  text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-  return text_splitter.split_documents(documents)
 
 
 def get_embeddings():
@@ -137,37 +125,32 @@ def get_chat_model():
   return ChatOpenAI(temperature=0)
 
 
-def get_document_store(docs, embeddings):
-  upsert = Qdrant.from_documents(
-    docs,
-    embeddings,
-    url=os.environ.get("QDRANT_URL"),
-    collection_name="first_project",
-    api_key="PtYX2su0b_Xof19YN54ybCUvIZgdA94HqDe0vPUHBQ8CNu7Moun0VQ"
-  )
-  print(upsert)
-  return upsert
 
-
-def ask_question_with_context(question, chat_history):
-    global qa
+def ask_question_with_context(question, c_history):
+    global qa, chat_history
+    
     query = ""
-    result = qa({"question": question, "chat_history": chat_history})
+    result = qa({"question": question, "chat_history": c_history})
     print("answer:", result["answer"])
     chat_history = [(query, result["answer"])]
-    return chat_history
+
+    return result["answer"]
 
 def main():
     global qa
     embeddings = get_embeddings()
-    docs = load_and_split_documents()
-    
-    doc_store = get_document_store(docs, embeddings)
     llm = get_chat_model()
+
+    vector_store = Qdrant(
+        client=connection,
+        collection_name=os.getenv("QDRANT_COLLECTION_NAME"),
+        embeddings=embeddings,
+    )
+
 
     qa = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=doc_store.as_retriever(),
+        retriever=vector_store.as_retriever(),
         return_source_documents=True,
         verbose=False
     )
