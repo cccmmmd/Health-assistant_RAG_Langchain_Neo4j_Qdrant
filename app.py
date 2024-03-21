@@ -1,7 +1,6 @@
 import sys
 import configparser
 import os
-import configparser
 
 
 from langchain.document_loaders import PyPDFLoader

@@ -7,3 +7,8 @@ qdrant_client
 langchain_openai
 pypdf
 openai
+langchain-community 
+langchain-experimental 
+neo4j 
+tiktoken 
+yfiles_jupyter_graphs 
