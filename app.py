@@ -72,7 +72,7 @@ def message_text(event):
 
 @app.route('/', methods=['GET','POST'])
 def home():
-   response='請輸入你想詢問小助手的健康問題...'
+   response='輸入你的三高健康問題，讓我回答你！'
    if request.form and 'question' in request.form:
         site = request.form.get('question')
         response = neo4j_db.Neo4j().ask_question_with_context(site)  
