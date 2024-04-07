@@ -48,14 +48,13 @@ class Neo4j:
         reduce_k_below_max_tokens=True, max_tokens_limit=2000,
         return_source_documents=True)
 
-    chat_history = []
+    
 
     def ask_question_with_context(self, question):
         global chat_history
-    
         query = ""
         result = self.chain({"question": question}, return_only_outputs=True)
 
         print("answer:", result["answer"])
-        chat_history = [(query, result["answer"])]
+        
         return result["answer"]
